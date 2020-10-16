@@ -5,7 +5,7 @@ An module responsible for rendering SPR, BTS, MAP and FIN files from Dark Colony
 Added ability to convert SPR file to Bitmap 
 
 ## Screenshot
-![](images/syth_android.png)
+![](images/syth_android_small.png)
 
 ## Credits
 
