@@ -8,4 +8,5 @@ class Frame() {
     var disY: Int = 0
     var start: Long = 0
     var len: Long = 0
+    var no: Int = 0
 }

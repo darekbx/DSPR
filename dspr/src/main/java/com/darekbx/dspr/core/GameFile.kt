@@ -4,7 +4,7 @@ import java.lang.IllegalStateException
 
 open class GameFile constructor(val fileData: ByteArray) {
 
-    fun byte(index: Long): Int {
+    fun byteAt(index: Long): Int {
         if (index >= Int.MAX_VALUE) {
             throw IllegalStateException("Index exceeds maximum Int size!")
         }
@@ -12,18 +12,19 @@ open class GameFile constructor(val fileData: ByteArray) {
     }
 
     fun shortAt(index: Long): Int {
-        return this.byte(index) + this.byte(index + 1) * 256
+        return this.byteAt(index) + this.byteAt(index + 1) * 256
     }
 
     fun longAt(index: Long): Long {
-        return (this.byte(index)
-                + this.byte(index + 1) * 256
-                + this.byte(index + 2) * Math.pow(256.0, 2.0)
-                + this.byte(index + 3) * Math.pow(256.0, 3.0)).toLong()
+        return (this.byteAt(index)
+                + this.byteAt(index + 1) * 256
+                + this.byteAt(index + 2) * Math.pow(256.0, 2.0)
+                + this.byteAt(index + 3) * Math.pow(256.0, 3.0)).toLong()
     }
 
     fun stringAt(index: Int, len: Int): String {
-        throw NotImplementedError("GameFile.stringAt is not implemented")
-        //return this.fileData.substring(index, index + len)
+        val destination = ByteArray(len)
+        this.fileData.copyInto(destination, 0, index, index + len)
+        return String(destination)
     }
 }

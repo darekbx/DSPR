@@ -6,22 +6,20 @@ import com.darekbx.dspr.core.model.Frame
 
 class SPR(fileData: ByteArray) : GameFile(fileData) {
 
-    var palette = mutableListOf<IntArray>()
-    var fallbackPalette = mutableListOf<IntArray>()
+    private var palette = mutableListOf<IntArray>()
+    private var fallbackPalette = mutableListOf<IntArray>()
 
-    var frames = mutableListOf<Frame>()
-    var dataset = {}
-    val scale = 1
-    val team = 7
+    private var frames = mutableListOf<Frame>()
+    private var team = 7
 
-    var isCompressed: Boolean
-    var noImages: Int
-    var dataStart: Int
+    private var isCompressed: Boolean
+    private var noImages: Int
+    private var dataStart: Int
 
-    var lenCumul = 0L
+    private var lenCumul = 0L
 
     init {
-        isCompressed = this.byte(0) == 129
+        isCompressed = this.byteAt(0) == 129
         noImages = this.shortAt(2)
         dataStart = 776 + (this.noImages * 8)
 
@@ -29,53 +27,58 @@ class SPR(fileData: ByteArray) : GameFile(fileData) {
         val x2 = if (isCompressed) fileData.size - dataStart else fileData.size - 776 + noImages * 4
         assert(x1 == x2.toLong(), { "File integrity check failed!" })
 
-        for (i in 0 until 256) {
-            this.palette.add(
-                intArrayOf(
-                    this.byte(8 + i * 3 + 0L) * 4 + 3,
-                    this.byte(8 + i * 3 + 1L) * 4 + 3,
-                    this.byte(8 + i * 3 + 2L) * 4 + 3
-                )
-            )
-        }
-
-        for (f in 0 until noImages) {
-
-            var frame = Frame()
-
-            var infoOffset = 776 + (f * 8L)
-            frame.width = this.shortAt(infoOffset)
-            frame.height = this.shortAt(infoOffset + 2)
-            frame.disX = this.shortAt(infoOffset + 4)
-            frame.disY = this.shortAt(infoOffset + 6)
-
-            frame.start = this.dataStart + this.lenCumul
-
-            if (this.isCompressed) {
-                frame.len = this.longAt(frame.start)
-                this.lenCumul += frame.len + 4
-            } else {
-                frame.len = (frame.width * frame.height).toLong()
-                this.lenCumul += frame.len
-            }
-
-            this.frames.add(frame)
-        }
+        extractColorPalette()
+        extractFrames()
     }
 
-    fun getFrameCount(): Int {
-        return noImages
-    }
+    fun getFrameCount() = noImages
 
-    fun getFrameInfo(f: Int): Frame {
-        return this.frames[f]
-    }
+    fun getFrameInfo(f: Int) = this.frames[f]
 
-   fun setFrameInfo(f: Int, info: Frame) {
+    fun setFrameInfo(f: Int, info: Frame) {
         this.frames[f] = info
     }
 
-    fun rgb(id: Int): IntArray {
+    fun setTeam(team: Int) {
+        this.team = team
+    }
+
+    private fun extractColorPalette() {
+        for (i in 0 until 256) {
+            palette.add(
+                intArrayOf(
+                    byteAt(8 + i * 3 + 0L) * 4 + 3,
+                    byteAt(8 + i * 3 + 1L) * 4 + 3,
+                    byteAt(8 + i * 3 + 2L) * 4 + 3
+                )
+            )
+        }
+    }
+
+    private fun extractFrames() {
+        for (f in 0 until noImages) {
+                var infoOffset = 776 + (f * 8L)
+                var frame = Frame().apply {
+                    width = shortAt(infoOffset)
+                    height = shortAt(infoOffset + 2)
+                    disX = shortAt(infoOffset + 4)
+                    disY = shortAt(infoOffset + 6)
+                    start = dataStart + lenCumul
+                }
+
+            if (isCompressed) {
+                frame.len = longAt(frame.start)
+                lenCumul += frame.len + 4
+            } else {
+                frame.len = (frame.width * frame.height).toLong()
+                lenCumul += frame.len
+            }
+
+            frames.add(frame)
+        }
+    }
+
+    private fun rgb(id: Int): IntArray {
         // red(0)		-7*6	Pan Luma
         // blue(1)		-6*6	Stratus
         // yellow(2)	-5*6	Taar
@@ -92,82 +95,54 @@ class SPR(fileData: ByteArray) : GameFile(fileData) {
                 this.team != 7 &&
                 this.palette[138][0] == 3 && this.palette[138][1] == 255 && this.palette[138][2] == 255 &&
                 this.fallbackPalette.isNotEmpty()
-            )
+            ) {
                 return this.fallbackPalette[_id]
+            }
         }
-        return this.palette[id.toInt()]
+        return this.palette[id]
     }
 
     fun frameAsImage(f: Int, doFlip: Boolean, doDisplace: Boolean): Bitmap? {
-
-        if (this.frames[f] == null) return null
         var frame = this.frames[f]
 
         // TODO: doFlip
 
-        var width = frame.width
-        var height = frame.height
-        var curX = 0
-        var curY = 0
-
-        if (doDisplace) {
-            curX = frame.disX
-            curY = frame.disY
-            width = frame.width + frame.disX
-            height = frame.height + frame.disY
+        val pixelCanvas = PixelCanvas(frame, doFlip, doDisplace)
+        when {
+            isCompressed -> drawCompressedFrame(frame, pixelCanvas)
+            else -> drawFrame(frame, pixelCanvas)
         }
 
-        val canvas = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+        return pixelCanvas.getImage()
+    }
 
-        if (isCompressed) {
-            var c = (frame.start+4)
-            while (c < (frame.start + frame.len)) {
-                var x = this.byte(c)
-                if (x < 128) {
-                    var noNextRawBytes = x + 1
+    private fun drawFrame(frame: Frame, pixelCanvas: PixelCanvas) {
+        for (cursor in frame.start until (frame.start + frame.len)) {
+            var x = this.byteAt(cursor)
+            var rgb = this.rgb(x)
+            pixelCanvas.addPixel(Color.argb(255, rgb[0], rgb[1], rgb[2]))
+        }
+    }
 
-                    for (r in (1..noNextRawBytes)) {
-                        var x = this.byte(c+r)
-                        var rgb = this.rgb(x)
-
-                        canvas.setPixel(curX, curY, Color.argb(255, rgb[0], rgb[1], rgb[2]))
-
-                        curX++
-                        if (curX >= width) {
-                            curX = if (doDisplace) frame.disX else 0
-                            curY++
-                        }
-                    }
-                    c += (noNextRawBytes+1)
-                } else {
-                    var noBlackPixels = 256 - x
-                    for (b in 0 until noBlackPixels) {
-                        canvas.setPixel(curX, curY, Color.BLACK)
-
-                        curX++
-                        if (curX >= width) {
-                            curX = if (doDisplace) frame.disX else 0
-                            curY++
-                        }
-                    }
-                    c++
+    private fun drawCompressedFrame(frame: Frame, pixelCanvas: PixelCanvas) {
+        var cursor = (frame.start + 4)
+        while (cursor < (frame.start + frame.len)) {
+            var x = this.byteAt(cursor)
+            if (x < 128) {
+                var noNextRawBytes = x + 1
+                for (r in (1..noNextRawBytes)) {
+                    var x = this.byteAt(cursor + r)
+                    var rgb = this.rgb(x)
+                    pixelCanvas.addPixel(Color.argb(255, rgb[0], rgb[1], rgb[2]))
                 }
+                cursor += (noNextRawBytes + 1)
+            } else {
+                var noBlackPixels = 256 - x
+                for (b in 0 until noBlackPixels) {
+                    pixelCanvas.addPixel(Color.BLACK)
+                }
+                cursor++
             }
         }
-        else {
-            for (c in frame.start until (frame.start + frame.len)) {
-                var x = this.byte(c)
-                var rgb = this.rgb(x)
-                canvas.setPixel(curX, curY, Color.argb(255, rgb[0], rgb[1], rgb[2]))
-
-                curX++
-                if (curX >= width) {
-                    curX = if (doDisplace) frame.disX else 0
-                    curY++
-                }
-            }
-        }
-
-        return canvas
     }
 }
