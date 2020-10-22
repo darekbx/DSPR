@@ -107,7 +107,10 @@ class SPR(fileData: ByteArray) : GameFile(fileData) {
 
         // TODO: doFlip
 
-        val pixelCanvas = PixelCanvas(frame, doFlip, doDisplace)
+        val disX = if (doDisplace) frame.disX else 0
+        val disY = if (doDisplace) frame.disY else 0
+        val pixelCanvas = PixelCanvas(frame.width, frame.height, doFlip, disX, disY)
+
         when {
             isCompressed -> drawCompressedFrame(frame, pixelCanvas)
             else -> drawFrame(frame, pixelCanvas)
