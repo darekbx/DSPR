@@ -22,9 +22,9 @@ open class GameFile constructor(val fileData: ByteArray) {
                 + this.byteAt(index + 3) * Math.pow(256.0, 3.0)).toLong()
     }
 
-    fun stringAt(index: Int, len: Int): String {
+    fun stringAt(index: Long, len: Int): String {
         val destination = ByteArray(len)
-        this.fileData.copyInto(destination, 0, index, index + len)
+        this.fileData.copyInto(destination, 0, index.toInt(), index.toInt() + len)
         return String(destination)
     }
 }

@@ -7,6 +7,7 @@
     tools:context=".AssetActivity">
 
     <FrameLayout
+        android:id="@+id/assets_spinner_container"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         app:layout_constraintTop_toTopOf="parent"
@@ -16,6 +17,21 @@
         android:background="#efefef">
         <androidx.appcompat.widget.AppCompatSpinner
             android:id="@+id/assets_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            />
+    </FrameLayout>
+    <FrameLayout
+        android:id="@+id/animation_spinner_container"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@id/assets_spinner_container"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_margin="16dp"
+        android:background="#efefef">
+        <androidx.appcompat.widget.AppCompatSpinner
+            android:id="@+id/animation_spinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             />
