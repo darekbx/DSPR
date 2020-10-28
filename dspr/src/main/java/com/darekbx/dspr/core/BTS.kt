@@ -7,7 +7,7 @@ import com.darekbx.dspr.core.model.Frame
 class BTS(fileData: ByteArray) : GameFile(fileData) {
 
     private var palette = mutableListOf<IntArray>()
-    private var frames = mutableListOf<Frame>()
+    private var frames = mutableMapOf<Int, Frame>()
 
     private var noImages: Int
 
@@ -31,18 +31,13 @@ class BTS(fileData: ByteArray) : GameFile(fileData) {
     }
 
     private fun extractFrames() {
-        this.frames = ArrayList()
-
-        for (i in 0..10000) {
-            this.frames.add(i, Frame())
-        }
-
         for (f in 0 until noImages) {
             var frame = Frame().apply {
                 no = f
                 start = 776L + 1028 * f
             }
-            this.frames.set(this.longAt(frame.start).toInt(), frame)
+            val index = this.longAt(frame.start).toInt()
+            this.frames.put(index, frame)
         }
     }
 
@@ -57,7 +52,7 @@ class BTS(fileData: ByteArray) : GameFile(fileData) {
         val canvas = PixelCanvas(32, 32, doFlip)
 
         var c = frameStart + 4L
-        while (c < (frameStart + 1028)) {
+        while (c < (frameStart + 1028L)) {
             var x = this.byteAt(c)
             var rgb = this.rgb(x)
             if (rgb[0] != 255 && rgb[1] != 3 && rgb[2] != 255) {
@@ -70,4 +65,15 @@ class BTS(fileData: ByteArray) : GameFile(fileData) {
 
         return canvas.getImage()
     }
+
+    fun frameAsImageAtFID(fid: Int, doFlip: Boolean): Bitmap? {
+        if (!this.frames.containsKey(fid)) {
+            return null
+        }
+        var frame = this.frames[fid]
+        return this.frameAsImage(frame?.no ?: 0, doFlip)
+    }
+
+    fun frameAsCanvasAtFID(fid: Int, doFlip: Boolean) =
+        frameAsImageAtFID(fid, doFlip)
 }

@@ -1,27 +1,36 @@
 package com.darekbx.test.dspr
-import androidx.appcompat.app.AppCompatActivity
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Matrix
 import android.os.Bundle
 import android.util.Log
 import android.util.TypedValue
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import com.darekbx.dspr.core.BTS
 import com.darekbx.dspr.core.FIN
+import com.darekbx.dspr.core.MAP
 import com.darekbx.dspr.core.SPR
 import com.darekbx.dspr.core.model.Animation
-import com.darekbx.dspr.core.model.AnimationFrame
 import kotlinx.android.synthetic.main.activity_asset.*
-import java.lang.IllegalStateException
+import kotlinx.coroutines.*
 import java.util.*
 import kotlin.concurrent.timerTask
 
 class AssetActivity : AppCompatActivity() {
 
+    companion object {
+        val ANIMATION_TIME = 120L
+    }
+
     private val typesMap = listOf(
         "SPR",
         "BTS",
-        "FIN"
+        "FIN",
+        "MAP"
     )
 
     private var activeAsset: Any? = null
@@ -47,7 +56,12 @@ class AssetActivity : AppCompatActivity() {
 
         assets_spinner.adapter = ArrayAdapter(this, R.layout.adapter_spinner, assets)
         assets_spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
                 button_execute.isEnabled = true
                 frame_picker.setText("")
                 image_preview.setImageBitmap(null)
@@ -74,6 +88,11 @@ class AssetActivity : AppCompatActivity() {
         typesMap.forEach { rawName = rawName.removeSuffix(".${it.toLowerCase()}") }
 
         val assetFileId = resources.getIdentifier(rawName, "raw", packageName)
+        if (assetFileId == 0) {
+            Toast.makeText(this, "Asset '$rawName' was not found!", Toast.LENGTH_LONG).show()
+            return
+        }
+
         val assetFile = resources.openRawResource(assetFileId)
         val assetType = assetName.split('.').last()
         val assetReadStart = System.currentTimeMillis()
@@ -82,8 +101,9 @@ class AssetActivity : AppCompatActivity() {
             throw IllegalStateException("Asset type is not supported!")
         }
 
-        animation_spinner.adapter = null
-        animation_spinner.setSelection(0)
+        animation_spinner.visibility = View.GONE
+        frame_picker.visibility = View.VISIBLE
+        button_execute.visibility = View.VISIBLE
 
         when {
             assetType == "SPR" -> {
@@ -96,8 +116,18 @@ class AssetActivity : AppCompatActivity() {
                 frameCount = bts.getFrameCount()
                 activeAsset = bts
             }
+            assetType == "MAP" -> {
+                val assetBtsFileId = resources.getIdentifier("desert", "raw", packageName)
+                val assetBtsFile = resources.openRawResource(assetBtsFileId)
+                val bts = BTS(assetBtsFile.readBytes())
+                val map = MAP(assetFile.readBytes(), bts)
+                displayMap(map)
+            }
             assetType == "FIN" -> {
                 val fin = FIN(assetFile.readBytes())
+                animation_spinner.visibility = View.VISIBLE
+                frame_picker.visibility = View.GONE
+                button_execute.visibility = View.GONE
                 loadAnimationSpinner(fin)
             }
         }
@@ -107,7 +137,45 @@ class AssetActivity : AppCompatActivity() {
         frame_picker.hint = "Frame number from 0 to ${frameCount - 1}"
     }
 
+    private fun displayMap(map: MAP) {
+        animation_spinner.visibility = View.GONE
+        frame_picker.visibility = View.GONE
+        button_execute.visibility = View.GONE
+        loading_view.visibility = View.VISIBLE
+
+        GlobalScope.launch(Dispatchers.Main) {
+            val frameReadStart = System.currentTimeMillis()
+            val mapImage = loadMap(map).await()
+            val collisionMapImage = loadCollisionMap(map).await()
+            val frameRenderTime = System.currentTimeMillis() - frameReadStart
+            label.setText("Map rendering time: ${frameRenderTime}ms")
+
+            val combinedBitmap = Bitmap.createBitmap(mapImage.width, mapImage.height, Bitmap.Config.RGB_565)
+            val canvas = Canvas(combinedBitmap)
+            canvas.drawBitmap(mapImage, Matrix(), null)
+            canvas.drawBitmap(collisionMapImage, 0F, 0F, null)
+
+            image_preview.setImageBitmap(combinedBitmap)
+
+            loading_view.visibility = View.GONE
+        }
+    }
+
+    private fun loadMap(map: MAP): Deferred<Bitmap> {
+        return CoroutineScope(Dispatchers.IO).async {
+            map.asBitmap()
+        }
+    }
+
+    private fun loadCollisionMap(map: MAP): Deferred<Bitmap> {
+        return CoroutineScope(Dispatchers.IO).async {
+            map.getCollisionArea()
+        }
+    }
+
     private fun loadFrame() {
+        animationTimer?.cancel()
+
         frame_picker.text.toString()
             .toIntOrNull()
             ?.takeIf { it >= 0 && it < frameCount }
@@ -129,12 +197,23 @@ class AssetActivity : AppCompatActivity() {
     }
 
     private fun loadAnimationSpinner(fin: FIN) {
-        animation_spinner.adapter = ArrayAdapter(this, R.layout.adapter_spinner, fin.animations.keys.toTypedArray())
+        animation_spinner.adapter = ArrayAdapter(
+            this,
+            R.layout.adapter_spinner,
+            fin.animations.keys.toTypedArray()
+        )
         animation_spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val animation = animation_spinner.selectedItem as String
-                fin.animations.get(animation)?.let {
-                    loadAnimation(it)
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                if (animation_spinner.selectedItem != null) {
+                    val animation = animation_spinner.selectedItem as String
+                    fin.animations.get(animation)?.let {
+                        loadAnimation(it)
+                    }
                 }
             }
 
@@ -147,6 +226,11 @@ class AssetActivity : AppCompatActivity() {
         Log.d("DSPR", "Loading asset: $rawName")
 
         val assetFileId = resources.getIdentifier(rawName, "raw", packageName)
+        if (assetFileId == 0) {
+            Toast.makeText(this, "Asset '$rawName' was not found!", Toast.LENGTH_LONG).show()
+            return
+        }
+
         val assetFile = resources.openRawResource(assetFileId)
         val spr = SPR(assetFile.readBytes())
         var index = 0
@@ -175,7 +259,7 @@ class AssetActivity : AppCompatActivity() {
 
                 Log.d("DSPR", "Animation tick")
 
-            }, 0L, 40L)
+            }, 0L, ANIMATION_TIME)
         }
     }
 }

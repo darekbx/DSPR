@@ -104,9 +104,6 @@ class SPR(fileData: ByteArray) : GameFile(fileData) {
 
     fun frameAsImage(f: Int, doFlip: Boolean, doDisplace: Boolean): Bitmap? {
         var frame = this.frames[f]
-
-        // TODO: doFlip
-
         val disX = if (doDisplace) frame.disX else 0
         val disY = if (doDisplace) frame.disY else 0
         val pixelCanvas = PixelCanvas(frame.width, frame.height, doFlip, disX, disY)

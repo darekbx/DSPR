@@ -2,17 +2,20 @@ package com.darekbx.dspr.core
 
 import android.graphics.Bitmap
 
-class PixelCanvas (
+class PixelCanvas(
     var width: Int,
     var height: Int,
     val doFlip: Boolean = false,
     var disX: Int = 0,
-    var disY: Int = 0) {
+    var disY: Int = 0
+) {
 
     var curX = 0
     var curY = 0
 
     var canvas: Bitmap
+
+    var datasetIndex = 0L
 
     init {
         if (disX > 0) {
@@ -23,11 +26,15 @@ class PixelCanvas (
             curY = disY
             height = height + disY
         }
-        canvas = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+
+        canvas = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_4444)
     }
 
     fun addPixel(color: Int) {
-        canvas.setPixel(curX, curY, color)
+        when {
+            doFlip -> canvas.setPixel(width - 1 - curX + if (disX > 0) disX else 0, curY, color)
+            else -> canvas.setPixel(curX, curY, color)
+        }
         next()
     }
 
