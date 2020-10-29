@@ -139,7 +139,7 @@ class SPR(fileData: ByteArray) : GameFile(fileData) {
             } else {
                 var noBlackPixels = 256 - x
                 for (b in 0 until noBlackPixels) {
-                    pixelCanvas.addPixel(Color.BLACK)
+                    pixelCanvas.addPixel(Color.TRANSPARENT)
                 }
                 cursor++
             }
